@@ -20,6 +20,15 @@ export const api = {
   deleteAlert: (id)   => req('DELETE', '/alerts/' + encodeURIComponent(id)),
   getAlertStats: ()   => req('GET', '/alerts/stats'),
 
+  // CBE (alert origination)
+  createCBEAlert: (body) => req('POST', '/cbe/alerts', body),
+
+  // Geo Codes (SAME/UGC reference list)
+  getGeoCodes:    ()         => req('GET',    '/geocodes'),
+  createGeoCode:  (body)     => req('POST',   '/geocodes', body),
+  updateGeoCode:  (id, body) => req('PUT',    '/geocodes/' + id, body),
+  deleteGeoCode:  (id)       => req('DELETE', '/geocodes/' + id),
+
   // Feeds
   getFeeds:    ()         => req('GET',    '/feeds'),
   createFeed:  (body)     => req('POST',   '/feeds', body),

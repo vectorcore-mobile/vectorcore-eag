@@ -51,7 +51,7 @@ func (w *Worker) RunNow() {
 }
 
 func (w *Worker) sweep() {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	// Soft-delete expired active alerts
 	result := w.db.Where("expires < ? AND deleted_at IS NULL", now).

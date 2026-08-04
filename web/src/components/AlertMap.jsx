@@ -30,8 +30,10 @@ export default function AlertMap({ geometry, severity, areaDesc }) {
       return
     }
 
-    // Wrap bare geometry in a GeoJSON Feature so L.geoJSON accepts it
-    const feature = geomObj.type === 'Feature' ? geomObj : {
+    // Wrap bare geometry in a GeoJSON Feature so L.geoJSON accepts it.
+    // Feature and FeatureCollection are already valid GeoJSON on their own —
+    // only a bare geometry object (Polygon, MultiPolygon, ...) needs wrapping.
+    const feature = (geomObj.type === 'Feature' || geomObj.type === 'FeatureCollection') ? geomObj : {
       type: 'Feature',
       geometry: geomObj,
     }

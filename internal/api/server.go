@@ -74,6 +74,8 @@ func (s *Server) setup(webFS embed.FS, logWriter io.Writer) {
 	registerFeedHandlers(api, s.db, s.manager)
 	registerXMPPHandlers(api, s.db, s.xmpp)
 	registerSystemHandlers(api, s.db, s.xmpp, s.expiry, s.xmppCfg, s.startAt, s.version)
+	registerCBEHandlers(api, s.db, s.manager)
+	registerGeoCodeHandlers(api, s.db)
 
 	// SSE endpoint — pushes a "peer-change" event when a peer connects or disconnects.
 	r.Get("/api/v1/system/events", s.handleSSE)

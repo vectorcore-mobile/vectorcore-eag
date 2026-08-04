@@ -21,15 +21,15 @@ const capNamespace = "urn:oasis:names:tc:emergency:cap:1.2"
 // The XMLName accepts both bare "alert" and the CAP 1.2 namespaced form
 // used by FEMA IPAWS and other CAP 1.2 feeds.
 type capAlert struct {
-	XMLName    xml.Name   `xml:"urn:oasis:names:tc:emergency:cap:1.2 alert"`
-	Identifier string     `xml:"identifier"`
-	Sender     string     `xml:"sender"`
-	Sent       string     `xml:"sent"`
-	Status     string     `xml:"status"`
-	MsgType    string     `xml:"msgType"`
-	Scope      string     `xml:"scope"`
-	References string     `xml:"references"`
-	Infos      []capInfo  `xml:"info"`
+	XMLName    xml.Name  `xml:"urn:oasis:names:tc:emergency:cap:1.2 alert"`
+	Identifier string    `xml:"identifier"`
+	Sender     string    `xml:"sender"`
+	Sent       string    `xml:"sent"`
+	Status     string    `xml:"status"`
+	MsgType    string    `xml:"msgType"`
+	Scope      string    `xml:"scope"`
+	References string    `xml:"references"`
+	Infos      []capInfo `xml:"info"`
 }
 
 type capInfo struct {
@@ -195,7 +195,7 @@ func buildFallbackCAPXML(a *models.Alert) string {
 	if a.Sender != "" {
 		capXMLWriteTag(&b, "sender", a.Sender)
 	}
-	capXMLWriteTag(&b, "sent", a.Sent.Format(time.RFC3339))
+	capXMLWriteTag(&b, "sent", capDateTime(a.Sent))
 	capXMLWriteTag(&b, "status", a.Status)
 	capXMLWriteTag(&b, "msgType", a.MsgType)
 	capXMLWriteTag(&b, "scope", "Public")

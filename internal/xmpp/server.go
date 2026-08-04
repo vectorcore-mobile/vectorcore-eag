@@ -623,7 +623,7 @@ func buildCAPXML(a *models.Alert) string {
 	b.WriteString(`<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">`)
 	b.WriteString(xmlTag("identifier", a.ID))
 	b.WriteString(xmlTag("sender", a.Sender))
-	b.WriteString(xmlTag("sent", a.Sent.Format(time.RFC3339)))
+	b.WriteString(xmlTag("sent", capDateTime(a.Sent)))
 	b.WriteString(xmlTag("status", a.Status))
 	b.WriteString(xmlTag("msgType", a.MsgType))
 	b.WriteString(xmlTag("scope", a.Scope))
@@ -632,18 +632,23 @@ func buildCAPXML(a *models.Alert) string {
 	}
 	b.WriteString("<info>")
 	b.WriteString(xmlTag("language", "en-US"))
+	// category is required by the CAP 1.2 schema (<info> sequence: category+,
+	// event, ...) — this fallback path has no source category to draw on, so
+	// "Other" is the safe default (same fallback used elsewhere for
+	// unclassified alerts).
+	b.WriteString(xmlTag("category", "Other"))
 	b.WriteString(xmlTag("event", a.Event))
 	b.WriteString(xmlTag("urgency", a.Urgency))
 	b.WriteString(xmlTag("severity", a.Severity))
 	b.WriteString(xmlTag("certainty", a.Certainty))
 	if !a.Effective.IsZero() {
-		b.WriteString(xmlTag("effective", a.Effective.Format(time.RFC3339)))
+		b.WriteString(xmlTag("effective", capDateTime(a.Effective)))
 	}
 	if !a.Onset.IsZero() {
-		b.WriteString(xmlTag("onset", a.Onset.Format(time.RFC3339)))
+		b.WriteString(xmlTag("onset", capDateTime(a.Onset)))
 	}
 	if !a.Expires.IsZero() {
-		b.WriteString(xmlTag("expires", a.Expires.Format(time.RFC3339)))
+		b.WriteString(xmlTag("expires", capDateTime(a.Expires)))
 	}
 	if a.Headline != "" {
 		b.WriteString(xmlTag("headline", a.Headline))
@@ -663,6 +668,21 @@ func buildCAPXML(a *models.Alert) string {
 
 func xmlTag(name, value string) string {
 	return fmt.Sprintf("<%s>%s</%s>", name, xmlEscape(value), name)
+}
+
+// capDateTime formats a time as CAP 1.2's required dateTime form
+// "YYYY-MM-DDThh:mm:ssXzh:zm". The spec explicitly prohibits the "Z"
+// designator that Go's time.RFC3339 produces for UTC — "Alphabetic timezone
+// designators such as 'Z' MUST NOT be used. The timezone for UTC MUST be
+// represented as '-00:00'" (CAP-v1.2-os §3.3.2) — so UTC times need the
+// "+00:00" Go's numeric offset format would otherwise emit rewritten to
+// "-00:00".
+func capDateTime(t time.Time) string {
+	s := t.UTC().Format("2006-01-02T15:04:05-07:00")
+	if strings.HasSuffix(s, "+00:00") {
+		s = strings.TrimSuffix(s, "+00:00") + "-00:00"
+	}
+	return s
 }
 
 func xmlEscape(s string) string {

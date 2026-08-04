@@ -33,6 +33,7 @@ func Init(driver, dsn string) (*gorm.DB, error) {
 		&models.Alert{},
 		&models.FeedSource{},
 		&models.XMPPPeer{},
+		&models.GeoCode{},
 	); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}

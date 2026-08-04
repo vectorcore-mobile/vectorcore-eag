@@ -234,3 +234,18 @@
 }
 .toggle input:checked + .toggle-slider { background: rgba(245,166,35,0.3); }
 .toggle input:checked + .toggle-slider::before { transform: translateX(16px); background: var(--accent); }
+
+/* Leaflet-draw toolbar — match the dark ops console theme */
+.leaflet-draw-toolbar a {
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+}
+.leaflet-draw-toolbar a:hover { background-color: var(--border); }
+.leaflet-draw-actions a {
+  background-color: var(--surface2) !important;
+  color: var(--text) !important;
+  border-left-color: var(--bg) !important;
+}
+.leaflet-draw-actions a:hover { background-color: var(--border) !important; color: var(--accent) !important; }
+.leaflet-draw-tooltip { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.leaflet-draw-tooltip:before { border-right-color: var(--border); }

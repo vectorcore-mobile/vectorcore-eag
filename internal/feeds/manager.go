@@ -136,9 +136,9 @@ func (m *Manager) poll(ctx context.Context, sourceID uint) {
 	}
 
 	m.db.Model(&src).Updates(map[string]interface{}{
-		"last_polled":  now,
-		"last_status":  "ok",
-		"alert_count":  gorm.Expr("alert_count + ?", count),
+		"last_polled": now,
+		"last_status": "ok",
+		"alert_count": gorm.Expr("alert_count + ?", count),
 	})
 
 	slog.Debug("feeds: poll complete", "name", src.Name, "new_or_updated", count, "total", len(alerts))
@@ -169,8 +169,14 @@ func (m *Manager) upsertAlert(alert *models.Alert) bool {
 		return true
 	}
 
-	// Existing alert — check if meaningful fields changed
-	changed := existing.Expires != alert.Expires ||
+	// Existing alert — check if meaningful fields changed. A prior soft-delete
+	// (the expiry sweep, or a source re-reporting an alert it had previously
+	// stopped serving) counts as a change too: the source is actively
+	// reporting this alert again right now, so it belongs back in the active
+	// view rather than staying invisible forever.
+	wasDeleted := existing.DeletedAt.Valid
+	changed := wasDeleted ||
+		existing.Expires != alert.Expires ||
 		existing.Severity != alert.Severity ||
 		existing.Urgency != alert.Urgency ||
 		existing.Headline != alert.Headline
@@ -196,6 +202,9 @@ func (m *Manager) upsertAlert(alert *models.Alert) bool {
 	}
 	if changed {
 		updates["forwarded"] = false
+	}
+	if wasDeleted {
+		updates["deleted_at"] = nil
 	}
 
 	if err := m.db.Model(&models.Alert{}).Unscoped().Where("id = ?", alert.ID).Updates(updates).Error; err != nil {

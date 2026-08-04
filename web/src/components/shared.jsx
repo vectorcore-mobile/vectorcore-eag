@@ -1,5 +1,50 @@
 import React from 'react'
 
+// Standard NWS/CAP event type names — used both as the XMPP peer event
+// filter options and as the CBE compose-form Event dropdown.
+export const EVENT_TYPES = [
+  'Tornado Warning','Tornado Watch',
+  'Severe Thunderstorm Warning','Severe Thunderstorm Watch',
+  'Flash Flood Warning','Flash Flood Watch','Flash Flood Statement',
+  'Flood Warning','Flood Watch','Flood Statement','Flood Advisory',
+  'Areal Flood Warning','Areal Flood Watch','Areal Flood Advisory',
+  'Special Marine Warning',
+  'Winter Storm Warning','Winter Storm Watch',
+  'Blizzard Warning','Blizzard Watch',
+  'Ice Storm Warning','Ice Storm Watch',
+  'Freezing Rain Advisory','Sleet Advisory',
+  'Snow Squall Warning',
+  'Wind Chill Warning','Wind Chill Watch','Wind Chill Advisory',
+  'High Wind Warning','High Wind Watch','Wind Advisory',
+  'Lake Effect Snow Warning','Lake Effect Snow Watch','Lake Effect Snow Advisory',
+  'Dense Fog Advisory','Dense Smoke Advisory',
+  'Freeze Warning','Freeze Watch','Frost Advisory',
+  'Hard Freeze Warning','Hard Freeze Watch',
+  'Heat Advisory','Excessive Heat Warning','Excessive Heat Watch',
+  'Tropical Storm Warning','Tropical Storm Watch',
+  'Hurricane Warning','Hurricane Watch',
+  'Storm Surge Warning','Storm Surge Watch',
+  'Tsunami Warning','Tsunami Watch','Tsunami Advisory','Tsunami Statement',
+  'Coastal Flood Warning','Coastal Flood Watch','Coastal Flood Advisory','Coastal Flood Statement',
+  'High Surf Warning','High Surf Advisory','Rip Current Statement',
+  'Beach Hazards Statement',
+  'Lakeshore Flood Warning','Lakeshore Flood Watch','Lakeshore Flood Advisory',
+  'Fire Weather Watch','Red Flag Warning',
+  'Dust Storm Warning','Dust Advisory','Blowing Dust Advisory',
+  'Air Quality Alert','Air Stagnation Advisory',
+  'Ashfall Warning','Ashfall Advisory',
+  'Avalanche Warning','Avalanche Watch','Avalanche Advisory',
+  'Earthquake Warning','Volcano Warning',
+  'Civil Emergency Message','Civil Danger Warning',
+  'Evacuation Immediate','Shelter In Place Warning',
+  'Law Enforcement Warning','Nuclear Power Plant Warning',
+  'Radiological Hazard Warning','Hazmat Warning',
+  'Child Abduction Emergency','Blue Alert',
+  '911 Telephone Outage Emergency','Local Area Emergency',
+  'Special Weather Statement','Hazardous Weather Outlook',
+  'Short Term Forecast','Administrative Message','Test','Demo Warning',
+]
+
 export function SeverityBadge({ severity }) {
   const s = (severity || 'Unknown').toLowerCase()
   const cls = s === 'extreme' ? 'sev-extreme'

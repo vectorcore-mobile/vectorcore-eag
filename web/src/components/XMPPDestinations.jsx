@@ -1,51 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { api } from '../api.js'
-import { Toggle, Modal, ChipInput, SelectChipInput } from './shared.jsx'
+import { Toggle, Modal, ChipInput, SelectChipInput, EVENT_TYPES } from './shared.jsx'
 
 const SEVERITIES = ['Extreme','Severe','Moderate','Minor','Unknown']
 const STATUSES   = ['Actual','Exercise','System','Test','Draft']
-const NWS_EVENTS = [
-  'Tornado Warning','Tornado Watch',
-  'Severe Thunderstorm Warning','Severe Thunderstorm Watch',
-  'Flash Flood Warning','Flash Flood Watch','Flash Flood Statement',
-  'Flood Warning','Flood Watch','Flood Statement','Flood Advisory',
-  'Areal Flood Warning','Areal Flood Watch','Areal Flood Advisory',
-  'Special Marine Warning',
-  'Winter Storm Warning','Winter Storm Watch',
-  'Blizzard Warning','Blizzard Watch',
-  'Ice Storm Warning','Ice Storm Watch',
-  'Freezing Rain Advisory','Sleet Advisory',
-  'Snow Squall Warning',
-  'Wind Chill Warning','Wind Chill Watch','Wind Chill Advisory',
-  'High Wind Warning','High Wind Watch','Wind Advisory',
-  'Lake Effect Snow Warning','Lake Effect Snow Watch','Lake Effect Snow Advisory',
-  'Dense Fog Advisory','Dense Smoke Advisory',
-  'Freeze Warning','Freeze Watch','Frost Advisory',
-  'Hard Freeze Warning','Hard Freeze Watch',
-  'Heat Advisory','Excessive Heat Warning','Excessive Heat Watch',
-  'Tropical Storm Warning','Tropical Storm Watch',
-  'Hurricane Warning','Hurricane Watch',
-  'Storm Surge Warning','Storm Surge Watch',
-  'Tsunami Warning','Tsunami Watch','Tsunami Advisory','Tsunami Statement',
-  'Coastal Flood Warning','Coastal Flood Watch','Coastal Flood Advisory','Coastal Flood Statement',
-  'High Surf Warning','High Surf Advisory','Rip Current Statement',
-  'Beach Hazards Statement',
-  'Lakeshore Flood Warning','Lakeshore Flood Watch','Lakeshore Flood Advisory',
-  'Fire Weather Watch','Red Flag Warning',
-  'Dust Storm Warning','Dust Advisory','Blowing Dust Advisory',
-  'Air Quality Alert','Air Stagnation Advisory',
-  'Ashfall Warning','Ashfall Advisory',
-  'Avalanche Warning','Avalanche Watch','Avalanche Advisory',
-  'Earthquake Warning','Volcano Warning',
-  'Civil Emergency Message','Civil Danger Warning',
-  'Evacuation Immediate','Shelter In Place Warning',
-  'Law Enforcement Warning','Nuclear Power Plant Warning',
-  'Radiological Hazard Warning','Hazmat Warning',
-  'Child Abduction Emergency','Blue Alert',
-  '911 Telephone Outage Emergency','Local Area Emergency',
-  'Special Weather Statement','Hazardous Weather Outlook',
-  'Short Term Forecast','Administrative Message','Test','Demo Warning',
-]
 
 const EMPTY_FORM = {
   name:'', username:'', password:'', enabled:true,
@@ -222,7 +180,7 @@ export default function XMPPPeers() {
             </div>
             <div className="form-row">
               <label>Event</label>
-              <SelectChipInput values={form.filter_event} onChange={v => setF('filter_event', v)} options={NWS_EVENTS} placeholder="— Add event type —" />
+              <SelectChipInput values={form.filter_event} onChange={v => setF('filter_event', v)} options={EVENT_TYPES} placeholder="— Add event type —" />
             </div>
             <div className="form-row">
               <label>Area <span style={{color:'var(--muted)',fontWeight:400,textTransform:'none',fontSize:11}}>(substring match)</span></label>

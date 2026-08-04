@@ -15,7 +15,7 @@ import (
 )
 
 type nwsResponse struct {
-	Features []nwsFeature `json:"features"`
+	Features   []nwsFeature `json:"features"`
 	Pagination *struct {
 		Next string `json:"next"`
 	} `json:"pagination"`
@@ -27,29 +27,29 @@ type nwsFeature struct {
 }
 
 type nwsProperties struct {
-	ID          string   `json:"id"`
-	AreaDesc    string   `json:"areaDesc"`
-	Geocode     map[string][]string    `json:"geocode"`
-	AffectedZones []string `json:"affectedZones"`
-	Sent        string   `json:"sent"`
-	Effective   string   `json:"effective"`
-	Onset       string   `json:"onset"`
-	Expires     string   `json:"expires"`
-	Ends        string   `json:"ends"`
-	Status      string   `json:"status"`
-	MessageType string   `json:"messageType"`
-	Category    string   `json:"category"`
-	Severity    string   `json:"severity"`
-	Certainty   string   `json:"certainty"`
-	Urgency     string   `json:"urgency"`
-	Event       string   `json:"event"`
-	Sender      string   `json:"sender"`
-	SenderName  string   `json:"senderName"`
-	Headline    string   `json:"headline"`
-	Description string   `json:"description"`
-	Instruction string   `json:"instruction"`
-	Response    string   `json:"response"`
-	References  []struct {
+	ID            string              `json:"id"`
+	AreaDesc      string              `json:"areaDesc"`
+	Geocode       map[string][]string `json:"geocode"`
+	AffectedZones []string            `json:"affectedZones"`
+	Sent          string              `json:"sent"`
+	Effective     string              `json:"effective"`
+	Onset         string              `json:"onset"`
+	Expires       string              `json:"expires"`
+	Ends          string              `json:"ends"`
+	Status        string              `json:"status"`
+	MessageType   string              `json:"messageType"`
+	Category      string              `json:"category"`
+	Severity      string              `json:"severity"`
+	Certainty     string              `json:"certainty"`
+	Urgency       string              `json:"urgency"`
+	Event         string              `json:"event"`
+	Sender        string              `json:"sender"`
+	SenderName    string              `json:"senderName"`
+	Headline      string              `json:"headline"`
+	Description   string              `json:"description"`
+	Instruction   string              `json:"instruction"`
+	Response      string              `json:"response"`
+	References    []struct {
 		ID     string `json:"identifier"`
 		Sender string `json:"sender"`
 		Sent   string `json:"sent"`
@@ -150,6 +150,34 @@ func buildNWSCAPXML(p nwsProperties) string {
 	return b.String()
 }
 
+// parseTime parses a CAP/NWS timestamp and normalizes it to UTC.
+//
+// Source feeds report times with their local offset (e.g. "-04:00" for
+// NWS eastern-zone alerts). SQLite has no native timestamp type — these
+// columns are stored as TEXT, and comparisons like the expiry sweep's
+// "expires < ?" are lexicographic, not chronological. Storing values with
+// mixed offsets breaks that ordering (e.g. "20:00:00-04:00" sorts before
+// "21:14:00+00:00" even though it's chronologically later), which was
+// causing not-yet-expired alerts to be soft-deleted prematurely. Normalizing
+// every parsed time to UTC before it's stored keeps all rows on the same
+// offset so lexicographic and chronological order match.
+// capDateTime formats a time as CAP 1.2's required dateTime form
+// "YYYY-MM-DDThh:mm:ssXzh:zm". The spec explicitly prohibits the "Z"
+// designator time.RFC3339 produces for UTC — "Alphabetic timezone
+// designators such as 'Z' MUST NOT be used. The timezone for UTC MUST be
+// represented as '-00:00'" (CAP-v1.2-os §3.3.2) — so the "+00:00" Go's
+// numeric offset format emits for UTC needs rewriting to "-00:00". Used
+// only for locally-synthesized CAP XML (buildFallbackCAPXML) — real feed
+// timestamps (buildNWSCAPXML) pass the source's own already-compliant
+// dateTime strings straight through.
+func capDateTime(t time.Time) string {
+	s := t.UTC().Format("2006-01-02T15:04:05-07:00")
+	if strings.HasSuffix(s, "+00:00") {
+		s = strings.TrimSuffix(s, "+00:00") + "-00:00"
+	}
+	return s
+}
+
 func parseTime(s string) time.Time {
 	if s == "" {
 		return time.Time{}
@@ -161,7 +189,7 @@ func parseTime(s string) time.Time {
 	}
 	for _, f := range formats {
 		if t, err := time.Parse(f, s); err == nil {
-			return t
+			return t.UTC()
 		}
 	}
 	return time.Time{}
