@@ -16,7 +16,7 @@ ui:
 
 # Build the Go binary (embeds web/dist)
 build:
-	go build -ldflags "-X main.version=$(VERSION)" -o bin/$(BINARY) .
+	go build -ldflags "-X main.version=$(VERSION)" -o bin/$(BINARY) ./cmd/eag
 
 # Run tests
 test:

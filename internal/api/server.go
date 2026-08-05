@@ -81,7 +81,7 @@ func (s *Server) setup(webFS embed.FS, logWriter io.Writer) {
 	r.Get("/api/v1/system/events", s.handleSSE)
 
 	// SPA fallback: serve web/dist for all non-API routes
-	distFS, err := fs.Sub(webFS, "web/dist")
+	distFS, err := fs.Sub(webFS, "dist")
 	if err != nil {
 		panic(fmt.Sprintf("web/dist embed: %v", err))
 	}

@@ -77,7 +77,7 @@ function capDateTime(d) {
 
 // Mirrors internal/api/handlers_cbe.go's buildCBECAPXML — client-side so
 // Export works on the current unsaved form state without a round trip.
-function buildExportCAPXML(form, polygons, geocodes) {
+function buildExportCAPXML(form, polygons, circles, geocodes) {
   const id = 'CBE-' + (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`)
   let xml = '<?xml version="1.0" encoding="UTF-8"?>'
   xml += '<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">'
@@ -108,6 +108,7 @@ function buildExportCAPXML(form, polygons, geocodes) {
   xml += '<area>'
   xml += xmlTag('areaDesc', form.area_desc || '')
   for (const poly of polygons) xml += xmlTag('polygon', poly)
+  for (const c of circles) xml += xmlTag('circle', c)
   for (const gc of geocodes) {
     xml += '<geocode>' + xmlTag('valueName', gc.type) + xmlTag('value', gc.code) + '</geocode>'
   }
@@ -117,18 +118,45 @@ function buildExportCAPXML(form, polygons, geocodes) {
   return xml
 }
 
-// GeoJSON FeatureCollection of drawn shapes → CAP <polygon> ring strings
-// ("lat,lon lat,lon ..."). Mirrors the lon/lat swap done server-side.
-function shapesToCAPPolygons(featureGroup) {
-  if (!featureGroup) return []
-  const fc = featureGroup.toGeoJSON()
-  const polys = []
-  for (const f of fc.features || []) {
-    const ring = f.geometry?.coordinates?.[0]
-    if (!ring) continue
-    polys.push(ring.map(([lon, lat]) => `${lat},${lon}`).join(' '))
-  }
-  return polys
+// Drawn shapes → CAP <polygon> ring strings ("lat,lon lat,lon ...") and
+// <circle> strings ("lat,lon radius_km"). Mirrors the lon/lat swap and
+// meters→km conversion done server-side.
+function shapesToCAPGeometry(featureGroup) {
+  const polygons = []
+  const circles = []
+  if (!featureGroup) return { polygons, circles }
+  featureGroup.eachLayer(layer => {
+    if (layer instanceof L.Circle) {
+      const { lat, lng } = layer.getLatLng()
+      circles.push(`${lat},${lng} ${layer.getRadius() / 1000}`)
+      return
+    }
+    const ring = layer.toGeoJSON().geometry?.coordinates?.[0]
+    if (!ring) return
+    polygons.push(ring.map(([lon, lat]) => `${lat},${lon}`).join(' '))
+  })
+  return { polygons, circles }
+}
+
+// GeoJSON has no native circle type, so a drawn L.Circle is serialized as a
+// Point Feature carrying a "radius" property in meters (Leaflet's native
+// unit) — mirrors internal/api/handlers_cbe.go's extractCircles, which reads
+// that same shape back out. Polygons/rectangles use Leaflet's own toGeoJSON.
+function featureGroupToGeoJSON(featureGroup) {
+  const features = []
+  featureGroup.eachLayer(layer => {
+    if (layer instanceof L.Circle) {
+      const { lat, lng } = layer.getLatLng()
+      features.push({
+        type: 'Feature',
+        properties: { radius: layer.getRadius() },
+        geometry: { type: 'Point', coordinates: [lng, lat] },
+      })
+      return
+    }
+    features.push(layer.toGeoJSON())
+  })
+  return { type: 'FeatureCollection', features }
 }
 
 function downloadFile(content, filename, mimeType) {
@@ -236,7 +264,7 @@ export default function CBE() {
         // ("type is not defined") against this Leaflet version's GeometryUtil.
         polygon: { allowIntersection: false, showArea: false, shapeOptions: { color: '#f5a623' } },
         rectangle: { showArea: false, shapeOptions: { color: '#f5a623' } },
-        circle: false,
+        circle: { shapeOptions: { color: '#f5a623' } },
         circlemarker: false,
         marker: false,
         polyline: false,
@@ -321,8 +349,8 @@ export default function CBE() {
     .map(g => ({ type: g.type, code: g.code }))
 
   const exportCAP = () => {
-    const polygons = shapesToCAPPolygons(featureGroupRef.current)
-    const xml = buildExportCAPXML(form, polygons, selectedGeoCodePayload())
+    const { polygons, circles } = shapesToCAPGeometry(featureGroupRef.current)
+    const xml = buildExportCAPXML(form, polygons, circles, selectedGeoCodePayload())
     const slug = (form.event || 'draft').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     downloadFile(xml, `cap-alert-${slug}-${Date.now()}.xml`, 'application/xml')
   }
@@ -395,9 +423,11 @@ export default function CBE() {
     }
     setSelectedGeoCodeIds(matchedIds)
 
-    // Import <polygon> shapes onto the map, replacing whatever's drawn now.
+    // Import <polygon> and <circle> shapes onto the map, replacing whatever's
+    // drawn now.
     const polygonEls = Array.from(doc.getElementsByTagName('polygon'))
-    if (polygonEls.length && featureGroupRef.current) {
+    const circleEls = Array.from(doc.getElementsByTagName('circle'))
+    if ((polygonEls.length || circleEls.length) && featureGroupRef.current) {
       featureGroupRef.current.clearLayers()
       for (const el of polygonEls) {
         const text = el.textContent.trim()
@@ -414,6 +444,16 @@ export default function CBE() {
         }
         if (points.length >= 3) {
           featureGroupRef.current.addLayer(L.polygon(points, { color: '#f5a623' }))
+        }
+      }
+      for (const el of circleEls) {
+        const text = el.textContent.trim()
+        if (!text) continue
+        const [center, radiusKm] = text.split(/\s+/)
+        const [lat, lon] = (center || '').split(',').map(Number)
+        const radius = Number(radiusKm) * 1000
+        if (Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(radius) && radius > 0) {
+          featureGroupRef.current.addLayer(L.circle([lat, lon], { radius, color: '#f5a623' }))
         }
       }
       setShapeCount(featureGroupRef.current.getLayers().length)
@@ -440,7 +480,7 @@ export default function CBE() {
       effective: localToISO(form.effective),
       onset:     localToISO(form.onset),
       expires:   localToISO(form.expires),
-      geometry:  hasShapes ? JSON.stringify(featureGroupRef.current.toGeoJSON()) : '',
+      geometry:  hasShapes ? JSON.stringify(featureGroupToGeoJSON(featureGroupRef.current)) : '',
       geocodes:  selectedGeoCodePayload(),
     }
 
@@ -617,7 +657,7 @@ export default function CBE() {
                 placeholder="e.g. Jefferson County, AL" required />
             </div>
             <div className="form-row">
-              <label>Area Shapes <span style={{fontWeight:400,textTransform:'none'}}>— polygon/rectangle, drawn on a map (or use Geo Codes below instead)</span></label>
+              <label>Area Shapes <span style={{fontWeight:400,textTransform:'none'}}>— polygon/rectangle/circle, drawn on a map (or use Geo Codes below instead)</span></label>
               <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:12, color:'var(--muted)', flexWrap:'wrap' }}>
                 <span>{shapeCount} shape{shapeCount === 1 ? '' : 's'} drawn</span>
                 <button type="button" onClick={() => setMapOpen(true)}>Create Shapes</button>

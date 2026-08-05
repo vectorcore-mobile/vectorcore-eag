@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"gorm.io/gorm"
@@ -10,10 +11,12 @@ import (
 	"github.com/vectorcore/eag/internal/models"
 )
 
-// registerGeoCodeHandlers wires up CRUD for the curated SAME/UGC geocode
-// reference list — a hand-maintained subset (not the full NWS/FCC code
-// universe) that the CBE compose form reads from to attach CAP <geocode>
-// entries to an alert.
+// registerGeoCodeHandlers wires up CRUD for the curated geocode reference
+// list — a hand-maintained subset (not the full universe of any one coding
+// system) that the CBE compose form reads from to attach CAP <geocode>
+// entries to an alert. Type is an open string (CAP's <valueName> can name
+// any coding system — SAME/UGC in the US, but e.g. SGC, JMA_AREA, or
+// ISO3166-2 elsewhere), normalized to uppercase for consistent grouping.
 func registerGeoCodeHandlers(api huma.API, db *gorm.DB) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-geocodes",
@@ -38,13 +41,13 @@ func registerGeoCodeHandlers(api huma.API, db *gorm.DB) {
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, input *GeoCodeCreateInput) (*GeoCodeOutput, error) {
 		gc := models.GeoCode{
-			Type:        input.Body.Type,
+			Type:        strings.ToUpper(strings.TrimSpace(input.Body.Type)),
 			Code:        input.Body.Code,
 			Description: input.Body.Description,
 			Enabled:     input.Body.Enabled,
 		}
-		if gc.Type != "SAME" && gc.Type != "UGC" {
-			return nil, huma.Error422UnprocessableEntity("type must be SAME or UGC")
+		if gc.Type == "" {
+			return nil, huma.Error422UnprocessableEntity("type is required")
 		}
 		if gc.Code == "" {
 			return nil, huma.Error422UnprocessableEntity("code is required")
@@ -68,13 +71,14 @@ func registerGeoCodeHandlers(api huma.API, db *gorm.DB) {
 		if err := db.First(&gc, input.ID).Error; err != nil {
 			return nil, huma.Error404NotFound("geocode not found")
 		}
-		if input.Body.Type != "SAME" && input.Body.Type != "UGC" {
-			return nil, huma.Error422UnprocessableEntity("type must be SAME or UGC")
+		normType := strings.ToUpper(strings.TrimSpace(input.Body.Type))
+		if normType == "" {
+			return nil, huma.Error422UnprocessableEntity("type is required")
 		}
 		if input.Body.Code == "" {
 			return nil, huma.Error422UnprocessableEntity("code is required")
 		}
-		gc.Type = input.Body.Type
+		gc.Type = normType
 		gc.Code = input.Body.Code
 		gc.Description = input.Body.Description
 		gc.Enabled = input.Body.Enabled
@@ -116,7 +120,7 @@ type GeoCodeIDInput struct {
 }
 
 type GeoCodeBody struct {
-	Type        string `json:"type"        doc:"SAME or UGC"`
+	Type        string `json:"type"        doc:"Geocode scheme, e.g. SAME, UGC — normalized to uppercase"`
 	Code        string `json:"code"`
 	Description string `json:"description,omitempty"`
 	Enabled     bool   `json:"enabled"`

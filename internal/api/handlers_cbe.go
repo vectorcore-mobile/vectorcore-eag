@@ -54,14 +54,14 @@ type CBEAlertBody struct {
 	Onset       string       `json:"onset,omitempty"        doc:"ISO 8601"`
 	Expires     string       `json:"expires"                doc:"ISO 8601 — required"`
 	AreaDesc    string       `json:"area_desc"               doc:"Required"`
-	Geometry    string       `json:"geometry,omitempty"      doc:"GeoJSON FeatureCollection of drawn polygons — required unless at least one geocode is given"`
-	GeoCodes    []GeoCodeRef `json:"geocodes,omitempty" doc:"SAME/UGC codes from the reference list — required unless a polygon is drawn, additive to it otherwise"`
+	Geometry    string       `json:"geometry,omitempty"      doc:"GeoJSON FeatureCollection of drawn polygons/rectangles and circles (circles as Point features with a 'radius' property in meters) — required unless at least one geocode is given"`
+	GeoCodes    []GeoCodeRef `json:"geocodes,omitempty" doc:"Geocodes from the reference list — required unless a shape is drawn, additive to it otherwise"`
 }
 
 // GeoCodeRef identifies a reference GeoCode by its CAP fields directly
 // (type + code), so the client doesn't need to round-trip a database ID.
 type GeoCodeRef struct {
-	Type string `json:"type" doc:"SAME or UGC"`
+	Type string `json:"type" doc:"Geocode scheme, e.g. SAME, UGC, or any other <valueName> the CBC recognizes"`
 	Code string `json:"code"`
 }
 
@@ -171,7 +171,8 @@ func createCBEAlert(db *gorm.DB, manager *feeds.Manager, input *CBEAlertInput) (
 	}
 
 	polygons := geometryToCAPPolygons(b.Geometry)
-	alert.RawCAP = buildCBECAPXML(&alert, category, b.Instruction, b.SenderName, polygons, b.GeoCodes)
+	circles := geometryToCAPCircles(b.Geometry)
+	alert.RawCAP = buildCBECAPXML(&alert, category, b.Instruction, b.SenderName, polygons, circles, b.GeoCodes)
 
 	manager.UpsertAlertDirect(&alert)
 
@@ -267,6 +268,58 @@ func capRingFromPolygonCoords(polyCoords []interface{}) string {
 	return strings.Join(points, " ")
 }
 
+// geometryToCAPCircles extracts CAP 1.2 <circle> strings ("lat,lon
+// radius_km") from a GeoJSON document. GeoJSON has no native circle type, so
+// a circle is represented as a Point Feature carrying a "radius" property in
+// meters (Leaflet's native unit) — CAP requires the radius in kilometers.
+func geometryToCAPCircles(geomJSON string) []string {
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(geomJSON), &raw); err != nil {
+		return nil
+	}
+	return extractCircles(raw)
+}
+
+func extractCircles(node map[string]interface{}) []string {
+	t, _ := node["type"].(string)
+	switch t {
+	case "FeatureCollection":
+		var out []string
+		features, _ := node["features"].([]interface{})
+		for _, f := range features {
+			if fm, ok := f.(map[string]interface{}); ok {
+				out = append(out, extractCircles(fm)...)
+			}
+		}
+		return out
+	case "Feature":
+		geom, _ := node["geometry"].(map[string]interface{})
+		props, _ := node["properties"].(map[string]interface{})
+		if geom == nil || props == nil {
+			return nil
+		}
+		if gt, _ := geom["type"].(string); gt != "Point" {
+			return nil
+		}
+		radius, ok := props["radius"].(float64)
+		if !ok {
+			return nil
+		}
+		coords, _ := geom["coordinates"].([]interface{})
+		if len(coords) < 2 {
+			return nil
+		}
+		lon, lonOk := coords[0].(float64)
+		lat, latOk := coords[1].(float64)
+		if !lonOk || !latOk {
+			return nil
+		}
+		return []string{fmt.Sprintf("%g,%g %g", lat, lon, radius/1000)}
+	default:
+		return nil
+	}
+}
+
 // --- CAP XML builder ---
 
 // weaSAMEEventCode maps the CBE's WEA alert-class dropdown values to the
@@ -284,7 +337,7 @@ var weaSAMEEventCode = map[string]string{
 	"Test Message":       "RMT",
 }
 
-func buildCBECAPXML(a *models.Alert, category, instruction, senderName string, polygons []string, geocodes []GeoCodeRef) string {
+func buildCBECAPXML(a *models.Alert, category, instruction, senderName string, polygons, circles []string, geocodes []GeoCodeRef) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
 	b.WriteString(`<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">`)
@@ -335,6 +388,9 @@ func buildCBECAPXML(a *models.Alert, category, instruction, senderName string, p
 	cbeXMLWriteTag(&b, "areaDesc", a.AreaDesc)
 	for _, poly := range polygons {
 		cbeXMLWriteTag(&b, "polygon", poly)
+	}
+	for _, c := range circles {
+		cbeXMLWriteTag(&b, "circle", c)
 	}
 	for _, gc := range geocodes {
 		b.WriteString("<geocode>")

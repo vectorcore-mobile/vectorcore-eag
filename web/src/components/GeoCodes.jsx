@@ -2,30 +2,9 @@ import React, { useState, useCallback, useEffect } from 'react'
 import { api } from '../api.js'
 import { Toggle, Modal } from './shared.jsx'
 
-const TAB_STYLE = (active) => ({
-  padding: '6px 16px',
-  fontSize: '0.82rem',
-  fontFamily: 'var(--font-ui)',
-  fontWeight: active ? 700 : 400,
-  letterSpacing: '0.04em',
-  textTransform: 'uppercase',
-  color: active ? 'var(--accent)' : 'var(--muted)',
-  background: 'none',
-  border: 'none',
-  borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-})
-
-const TABS = [
-  { key: 'SAME', label: 'SAME Codes' },
-  { key: 'UGC',  label: 'UGC Codes' },
-]
-
-const EMPTY_FORM = { code: '', description: '', enabled: true }
+const EMPTY_FORM = { type: '', code: '', description: '', enabled: true }
 
 export default function GeoCodes() {
-  const [activeTab, setActiveTab] = useState('SAME')
   const [codes, setCodes]     = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
@@ -45,17 +24,14 @@ export default function GeoCodes() {
 
   useEffect(() => { load() }, [load])
 
-  const filtered = codes.filter(c => c.type === activeTab)
-
   const openCreate = () => { setForm(EMPTY_FORM); setModal('create') }
-  const openEdit   = (c) => { setForm({ code: c.code, description: c.description, enabled: c.enabled }); setModal(c) }
+  const openEdit   = (c) => { setForm({ type: c.type, code: c.code, description: c.description, enabled: c.enabled }); setModal(c) }
 
   const save = async () => {
     setSaving(true)
     try {
-      const body = { ...form, type: activeTab }
-      if (modal === 'create') await api.createGeoCode(body)
-      else await api.updateGeoCode(modal.id, body)
+      if (modal === 'create') await api.createGeoCode(form)
+      else await api.updateGeoCode(modal.id, form)
       setModal(null)
       load()
     } catch (e) { alert('Error: ' + e.message) }
@@ -82,17 +58,8 @@ export default function GeoCodes() {
         <div className="page-title">Geo Codes</div>
         <div className="page-actions">
           <button onClick={load}>Refresh</button>
-          <button className="primary" onClick={openCreate}>+ Add {activeTab} Code</button>
+          <button className="primary" onClick={openCreate}>+ Add Geo Code</button>
         </div>
-      </div>
-
-      {/* Tab bar */}
-      <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom:16, gap:0 }}>
-        {TABS.map(t => (
-          <button key={t.key} style={TAB_STYLE(activeTab === t.key)} onClick={() => setActiveTab(t.key)}>
-            {t.label}
-          </button>
-        ))}
       </div>
 
       {error && <div className="error-msg">{error}</div>}
@@ -101,12 +68,13 @@ export default function GeoCodes() {
       <div className="table-wrap card">
         <table>
           <thead><tr>
-            <th>Enabled</th><th>Code</th><th>Description</th><th>Actions</th>
+            <th>Enabled</th><th>Type</th><th>Code</th><th>Description</th><th>Actions</th>
           </tr></thead>
           <tbody>
-            {filtered.map(c => (
+            {codes.map(c => (
               <tr key={c.id}>
                 <td><Toggle checked={c.enabled} onChange={() => toggleEnabled(c)} /></td>
+                <td style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{c.type}</td>
                 <td style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{c.code}</td>
                 <td style={{ fontSize:13 }}>{c.description || <span style={{color:'var(--muted)'}}>—</span>}</td>
                 <td>
@@ -117,9 +85,9 @@ export default function GeoCodes() {
                 </td>
               </tr>
             ))}
-            {!loading && !filtered.length && (
-              <tr><td colSpan={4} style={{color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>
-                No {activeTab} codes configured.
+            {!loading && !codes.length && (
+              <tr><td colSpan={5} style={{color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>
+                No geo codes configured.
               </td></tr>
             )}
           </tbody>
@@ -128,21 +96,22 @@ export default function GeoCodes() {
 
       {modal && (
         <Modal
-          title={modal === 'create' ? `Add ${activeTab} Code` : `Edit ${activeTab} Code: ${modal.code}`}
+          title={modal === 'create' ? 'Add Geo Code' : `Edit Geo Code: ${modal.type} ${modal.code}`}
           onClose={() => setModal(null)}
           footer={<>
             <button onClick={() => setModal(null)}>Cancel</button>
-            <button className="primary" onClick={save} disabled={saving || !form.code.trim()}>{saving ? 'Saving…' : 'Save'}</button>
+            <button className="primary" onClick={save} disabled={saving || !form.type.trim() || !form.code.trim()}>{saving ? 'Saving…' : 'Save'}</button>
           </>}
         >
           <div className="form-row">
-            <label>Type</label>
-            <input value={activeTab} disabled style={{ opacity:0.6 }} />
+            <label>Type * <span style={{fontWeight:400,textTransform:'none'}}>— coding system, e.g. SAME, UGC</span></label>
+            <input value={form.type} onChange={e => setF('type', e.target.value.toUpperCase())}
+              placeholder="SAME" style={{ textTransform:'uppercase' }} />
           </div>
           <div className="form-row">
             <label>Code *</label>
             <input value={form.code} onChange={e => setF('code', e.target.value)}
-              placeholder={activeTab === 'SAME' ? '045011' : 'ALZ001'} />
+              placeholder="045011" />
           </div>
           <div className="form-row">
             <label>Description</label>
