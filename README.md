@@ -1,4 +1,4 @@
-- Pulls in US NSW, ATOM, and RSS CAP feeds and filters and pushes them to XMPP clients (CectorCore CBC for example)
+- Pulls in US NSW, ATOM, and RSS CAP feeds and filters and pushes them to XMPP clients (VectorCore CBC for example)
 - CBE to author CAP alert
 *Common Alerting Protocol
 
