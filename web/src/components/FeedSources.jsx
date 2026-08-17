@@ -135,6 +135,8 @@ export default function FeedSources() {
         <Modal
           title={modal === 'create' ? 'Add Feed Source' : `Edit: ${modal.name}`}
           onClose={() => setModal(null)}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
           footer={<>
             <button onClick={() => setModal(null)}>Cancel</button>
             <button className="primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>

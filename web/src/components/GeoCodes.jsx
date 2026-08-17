@@ -98,6 +98,8 @@ export default function GeoCodes() {
         <Modal
           title={modal === 'create' ? 'Add Geo Code' : `Edit Geo Code: ${modal.type} ${modal.code}`}
           onClose={() => setModal(null)}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
           footer={<>
             <button onClick={() => setModal(null)}>Cancel</button>
             <button className="primary" onClick={save} disabled={saving || !form.type.trim() || !form.code.trim()}>{saving ? 'Saving…' : 'Save'}</button>

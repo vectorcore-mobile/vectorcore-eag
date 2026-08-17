@@ -91,9 +91,38 @@ export function Toggle({ checked, onChange }) {
   )
 }
 
-export function Modal({ title, onClose, children, footer }) {
+function isEditableTarget(el) {
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
+export function Modal({ title, onClose, children, footer, closeOnBackdrop = true, closeOnEscape = true }) {
+  const onCloseRef = React.useRef(onClose)
+  const closeOnEscapeRef = React.useRef(closeOnEscape)
+  React.useEffect(() => { onCloseRef.current = onClose })
+  React.useEffect(() => { closeOnEscapeRef.current = closeOnEscape })
+
+  React.useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        if (closeOnEscapeRef.current) onCloseRef.current()
+        return
+      }
+      // The browser's legacy "Backspace navigates back" behavior fires whenever
+      // focus sits on a non-editable element — silently unmounting the dialog
+      // via history navigation. Suppress it outside editable controls so
+      // Backspace only ever does its normal thing inside inputs.
+      if (e.key === 'Backspace' && !isEditableTarget(e.target)) {
+        e.preventDefault()
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [])
+
   return (
-    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && closeOnBackdrop && onClose()}>
       <div className="modal">
         <div className="modal-title">{title}</div>
         {children}
