@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/vectorcore/eag/internal/capverify"
 	"github.com/vectorcore/eag/internal/config"
 	"github.com/vectorcore/eag/internal/models"
 	"github.com/vectorcore/eag/internal/xmpp"
@@ -27,6 +29,7 @@ type Manager struct {
 	cfg       *config.FeedsConfig
 	publisher Publisher
 	client    *http.Client
+	verifier  *capverify.Verifier // nil if no trusted_roots_file is configured / it failed to load
 
 	ctx     context.Context // root context; used for background polls
 	mu      sync.Mutex
@@ -34,7 +37,7 @@ type Manager struct {
 }
 
 func NewManager(db *gorm.DB, cfg *config.FeedsConfig, pub Publisher) *Manager {
-	return &Manager{
+	m := &Manager{
 		db:        db,
 		cfg:       cfg,
 		publisher: pub,
@@ -43,6 +46,21 @@ func NewManager(db *gorm.DB, cfg *config.FeedsConfig, pub Publisher) *Manager {
 		},
 		pollers: make(map[uint]context.CancelFunc),
 	}
+
+	if cfg.Signature.TrustedRootsFile != "" {
+		pemBytes, err := os.ReadFile(cfg.Signature.TrustedRootsFile)
+		if err != nil {
+			slog.Error("feeds: could not read signature trusted_roots_file; sources with signature verification enabled will fail closed",
+				"path", cfg.Signature.TrustedRootsFile, "error", err)
+		} else if v, err := capverify.NewVerifier(pemBytes); err != nil {
+			slog.Error("feeds: could not load signature trusted roots; sources with signature verification enabled will fail closed",
+				"path", cfg.Signature.TrustedRootsFile, "error", err)
+		} else {
+			m.verifier = v
+		}
+	}
+
+	return m
 }
 
 // Start launches pollers for all enabled input sources from the database.
@@ -128,6 +146,12 @@ func (m *Manager) poll(ctx context.Context, sourceID uint) {
 		return
 	}
 
+	if src.VerifySignature {
+		for i := range alerts {
+			alerts[i].SignatureStatus = m.verifySignature(pollCtx, alerts[i].RawCAP)
+		}
+	}
+
 	count := 0
 	for i := range alerts {
 		if m.upsertAlert(&alerts[i]) {
@@ -142,6 +166,23 @@ func (m *Manager) poll(ctx context.Context, sourceID uint) {
 	})
 
 	slog.Debug("feeds: poll complete", "name", src.Name, "new_or_updated", count, "total", len(alerts))
+}
+
+// verifySignature runs capverify against an alert's raw CAP XML and returns
+// the status to store. Verification failures are logged but never block
+// ingestion — an operator sees "invalid"/"revoked"/"unsigned" on the alert
+// and decides, rather than a real warning silently disappearing because of
+// e.g. a transient AIA/OCSP fetch failure.
+func (m *Manager) verifySignature(ctx context.Context, rawCAP string) string {
+	if m.verifier == nil {
+		slog.Error("feeds: signature verification enabled for source but no trusted roots loaded")
+		return "invalid"
+	}
+	result := m.verifier.Verify(ctx, []byte(rawCAP))
+	if !result.Verified {
+		slog.Warn("feeds: CAP signature verification failed", "status", result.Status(), "reason", result.Reason)
+	}
+	return result.Status()
 }
 
 // upsertAlert inserts or updates an alert; returns true if it was new or changed.
@@ -182,23 +223,26 @@ func (m *Manager) upsertAlert(alert *models.Alert) bool {
 		existing.Headline != alert.Headline
 
 	updates := map[string]interface{}{
-		"sender":      alert.Sender,
-		"sent":        alert.Sent,
-		"status":      alert.Status,
-		"msg_type":    alert.MsgType,
-		"scope":       alert.Scope,
-		"references":  alert.References,
-		"event":       alert.Event,
-		"headline":    alert.Headline,
-		"description": alert.Description,
-		"severity":    alert.Severity,
-		"urgency":     alert.Urgency,
-		"certainty":   alert.Certainty,
-		"effective":   alert.Effective,
-		"onset":       alert.Onset,
-		"expires":     alert.Expires,
-		"area_desc":   alert.AreaDesc,
-		"raw_cap":     alert.RawCAP,
+		"sender":           alert.Sender,
+		"sent":             alert.Sent,
+		"status":           alert.Status,
+		"msg_type":         alert.MsgType,
+		"scope":            alert.Scope,
+		"references":       alert.References,
+		"event":            alert.Event,
+		"headline":         alert.Headline,
+		"description":      alert.Description,
+		"severity":         alert.Severity,
+		"urgency":          alert.Urgency,
+		"certainty":        alert.Certainty,
+		"effective":        alert.Effective,
+		"onset":            alert.Onset,
+		"expires":          alert.Expires,
+		"area_desc":        alert.AreaDesc,
+		"geometry":         alert.Geometry,
+		"geo_codes":        alert.GeoCodes, // GORM's auto-migrated column name for the GeoCodes field
+		"raw_cap":          alert.RawCAP,
+		"signature_status": alert.SignatureStatus,
 	}
 	if changed {
 		updates["forwarded"] = false

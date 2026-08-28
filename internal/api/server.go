@@ -30,6 +30,7 @@ type Server struct {
 	xmpp    *xmpp.Server
 	expiry  *expiry.Worker
 	xmppCfg *config.XMPPServerConfig
+	mapCfg  *config.MapConfig
 	startAt int64
 	version string
 }
@@ -40,6 +41,7 @@ func NewServer(
 	xmppSrv *xmpp.Server,
 	exp *expiry.Worker,
 	xmppCfg *config.XMPPServerConfig,
+	mapCfg *config.MapConfig,
 	startAt int64,
 	version string,
 	webFS embed.FS,
@@ -52,6 +54,7 @@ func NewServer(
 		xmpp:    xmppSrv,
 		expiry:  exp,
 		xmppCfg: xmppCfg,
+		mapCfg:  mapCfg,
 		startAt: startAt,
 		version: version,
 	}
@@ -73,7 +76,7 @@ func (s *Server) setup(webFS embed.FS, logWriter io.Writer) {
 	registerAlertHandlers(api, s.db)
 	registerFeedHandlers(api, s.db, s.manager)
 	registerXMPPHandlers(api, s.db, s.xmpp)
-	registerSystemHandlers(api, s.db, s.xmpp, s.expiry, s.xmppCfg, s.startAt, s.version)
+	registerSystemHandlers(api, s.db, s.xmpp, s.expiry, s.xmppCfg, s.mapCfg, s.startAt, s.version)
 	registerCBEHandlers(api, s.db, s.manager)
 	registerGeoCodeHandlers(api, s.db)
 

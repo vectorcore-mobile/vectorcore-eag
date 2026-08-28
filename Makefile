@@ -1,7 +1,7 @@
 .PHONY: ui build test clean dev-ui all install uninstall
 
 BINARY  = eag
-VERSION = 0.1.1
+VERSION = 0.1.2
 PREFIX  = /opt/vectorcore
 BINDIR  = $(PREFIX)/bin
 ETCDIR  = $(PREFIX)/etc

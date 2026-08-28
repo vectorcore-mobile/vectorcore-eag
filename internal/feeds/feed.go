@@ -2,11 +2,13 @@ package feeds
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,18 +35,30 @@ type capAlert struct {
 }
 
 type capInfo struct {
-	Event       string `xml:"event"`
-	Urgency     string `xml:"urgency"`
-	Severity    string `xml:"severity"`
-	Certainty   string `xml:"certainty"`
-	Effective   string `xml:"effective"`
-	Onset       string `xml:"onset"`
-	Expires     string `xml:"expires"`
-	Headline    string `xml:"headline"`
-	Description string `xml:"description"`
-	Areas       []struct {
-		AreaDesc string `xml:"areaDesc"`
-	} `xml:"area"`
+	Event       string    `xml:"event"`
+	Urgency     string    `xml:"urgency"`
+	Severity    string    `xml:"severity"`
+	Certainty   string    `xml:"certainty"`
+	Effective   string    `xml:"effective"`
+	Onset       string    `xml:"onset"`
+	Expires     string    `xml:"expires"`
+	Headline    string    `xml:"headline"`
+	Description string    `xml:"description"`
+	Areas       []capArea `xml:"area"`
+}
+
+// capArea mirrors a CAP 1.2 <area> block, including the shape and geocode
+// data buildCBECAPXML/buildNWSCAPXML emit on the way out — parsed here so
+// alerts ingested from signed/unsigned CAP XML feeds (e.g. IPAWS-OPEN) get
+// the same map + geocode display CBE- and NWS-sourced alerts already do.
+type capArea struct {
+	AreaDesc string   `xml:"areaDesc"`
+	Polygons []string `xml:"polygon"`
+	Circles  []string `xml:"circle"`
+	GeoCodes []struct {
+		ValueName string `xml:"valueName"`
+		Value     string `xml:"value"`
+	} `xml:"geocode"`
 }
 
 func pollFeed(ctx context.Context, client *http.Client, sourceURL, userAgent, feedName string) ([]models.Alert, error) {
@@ -311,8 +325,130 @@ func capToAlert(cap *capAlert, rawXML string, feedName string) *models.Alert {
 				areas[i] = ar.AreaDesc
 			}
 			a.AreaDesc = strings.Join(areas, "; ")
+			a.Geometry = areasToGeometry(info.Areas)
+			a.GeoCodes = models.EncodeGeoCodes(areasToGeoCodes(info.Areas))
 		}
 	}
 
 	return a
+}
+
+// areasToGeometry converts every <polygon>/<circle> across all of an alert's
+// <area> blocks into one GeoJSON FeatureCollection — a Polygon feature per
+// CAP polygon, a Point feature with a "radius" property (meters) per CAP
+// circle, matching the convention the CBE compose UI already uses so
+// AlertMap can render both the same way regardless of source. Returns ""
+// when there are no shapes (geocode-only areas are common and fine).
+func areasToGeometry(areas []capArea) string {
+	var features []map[string]interface{}
+	for _, ar := range areas {
+		for _, poly := range ar.Polygons {
+			coords := capRingToGeoJSON(poly)
+			if coords == nil {
+				continue
+			}
+			features = append(features, map[string]interface{}{
+				"type":       "Feature",
+				"properties": map[string]interface{}{},
+				"geometry": map[string]interface{}{
+					"type":        "Polygon",
+					"coordinates": [][][2]float64{coords},
+				},
+			})
+		}
+		for _, c := range ar.Circles {
+			lon, lat, radiusM, ok := capCircleToPoint(c)
+			if !ok {
+				continue
+			}
+			features = append(features, map[string]interface{}{
+				"type":       "Feature",
+				"properties": map[string]interface{}{"radius": radiusM},
+				"geometry": map[string]interface{}{
+					"type":        "Point",
+					"coordinates": [2]float64{lon, lat},
+				},
+			})
+		}
+	}
+	if len(features) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(map[string]interface{}{
+		"type":     "FeatureCollection",
+		"features": features,
+	})
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// capRingToGeoJSON parses a CAP polygon string ("lat,lon lat,lon ...") into
+// a GeoJSON exterior ring ([lon,lat] pairs), closing it if the source didn't
+// repeat the first point as required by the GeoJSON spec.
+func capRingToGeoJSON(poly string) [][2]float64 {
+	fields := strings.Fields(poly)
+	if len(fields) < 3 {
+		return nil
+	}
+	ring := make([][2]float64, 0, len(fields)+1)
+	for _, pair := range fields {
+		lat, lon, ok := parseLatLon(pair)
+		if !ok {
+			return nil
+		}
+		ring = append(ring, [2]float64{lon, lat})
+	}
+	if len(ring) < 3 {
+		return nil
+	}
+	if ring[0] != ring[len(ring)-1] {
+		ring = append(ring, ring[0])
+	}
+	return ring
+}
+
+// capCircleToPoint parses a CAP circle string ("lat,lon radius_km") into a
+// (lon, lat, radius_meters) triple.
+func capCircleToPoint(circle string) (lon, lat, radiusM float64, ok bool) {
+	fields := strings.Fields(circle)
+	if len(fields) != 2 {
+		return 0, 0, 0, false
+	}
+	lat, lon, ok = parseLatLon(fields[0])
+	if !ok {
+		return 0, 0, 0, false
+	}
+	radiusKm, err := strconv.ParseFloat(fields[1], 64)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	return lon, lat, radiusKm * 1000, true
+}
+
+func parseLatLon(pair string) (lat, lon float64, ok bool) {
+	parts := strings.SplitN(pair, ",", 2)
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	lat, err1 := strconv.ParseFloat(parts[0], 64)
+	lon, err2 := strconv.ParseFloat(parts[1], 64)
+	if err1 != nil || err2 != nil {
+		return 0, 0, false
+	}
+	return lat, lon, true
+}
+
+func areasToGeoCodes(areas []capArea) []models.GeoCodeEntry {
+	var out []models.GeoCodeEntry
+	for _, ar := range areas {
+		for _, gc := range ar.GeoCodes {
+			if gc.ValueName == "" || gc.Value == "" {
+				continue
+			}
+			out = append(out, models.GeoCodeEntry{Type: gc.ValueName, Value: gc.Value})
+		}
+	}
+	return out
 }

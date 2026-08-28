@@ -304,7 +304,7 @@ export default function CBE() {
   // Load prior CBE alerts for the reference picker once an Update/Cancel is selected.
   useEffect(() => {
     if (form.msg_type === 'Alert') return
-    api.getAlerts({ feed_source: 'CBE', limit: 50, sort: 'sent', order: 'desc' })
+    api.getAlerts({ feed_source: 'Local CBE', limit: 50, sort: 'sent', order: 'desc' })
       .then(r => setPriorAlerts(r?.alerts || []))
       .catch(() => {})
   }, [form.msg_type])
@@ -514,7 +514,7 @@ export default function CBE() {
               </div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
-              <Link to={`/alerts?feed_source=CBE`}><button type="button">View in Alerts</button></Link>
+              <Link to={`/alerts?feed_source=${encodeURIComponent('Local CBE')}`}><button type="button">View in Alerts</button></Link>
               <button type="button" onClick={() => setResult(null)}>Dismiss</button>
             </div>
           </div>

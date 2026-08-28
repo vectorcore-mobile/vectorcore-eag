@@ -4,7 +4,7 @@ import { StatusBadge, Toggle, Modal, fmtTime, fmtRel } from './shared.jsx'
 
 const TYPES = ['nws','atom','rss']
 
-const EMPTY_FORM = { name:'', url:'', type:'nws', enabled:true, poll_interval:60, params:{} }
+const EMPTY_FORM = { name:'', url:'', type:'nws', enabled:true, poll_interval:60, params:{}, verify_signature:false }
 
 export default function FeedSources() {
   const [sources, setSources] = useState([])
@@ -32,7 +32,8 @@ export default function FeedSources() {
   const openCreate = () => { setForm(EMPTY_FORM); setModal('create') }
   const openEdit   = (src) => {
     setForm({ name: src.name, url: src.url, type: src.type, enabled: src.enabled,
-      poll_interval: src.poll_interval, params: src.params || {} })
+      poll_interval: src.poll_interval, params: src.params || {},
+      verify_signature: src.verify_signature || false })
     setModal(src)
   }
 
@@ -73,6 +74,7 @@ export default function FeedSources() {
       enabled: !src.enabled,
       poll_interval: src.poll_interval,
       params: src.params || {},
+      verify_signature: src.verify_signature || false,
     }).catch(e => alert(e.message))
     load()
   }
@@ -102,7 +104,7 @@ export default function FeedSources() {
         <table>
           <thead><tr>
             <th>Enabled</th><th>Name</th><th>Type</th><th>URL</th>
-            <th>Interval</th><th>Last Polled</th><th>Status</th><th>Alerts</th><th>Actions</th>
+            <th>Interval</th><th>Sig Verify</th><th>Last Polled</th><th>Status</th><th>Alerts</th><th>Actions</th>
           </tr></thead>
           <tbody>
             {sources.map(src => (
@@ -112,6 +114,9 @@ export default function FeedSources() {
                 <td><span className="badge" style={{background:'var(--surface2)',color:'var(--info)',border:'1px solid rgba(58,143,212,0.3)'}}>{src.type}</span></td>
                 <td style={{ fontFamily:'var(--font-mono)', fontSize:11, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{src.url}</td>
                 <td style={{ fontFamily:'var(--font-mono)', fontSize:12 }}>{src.poll_interval}s</td>
+                <td>{src.verify_signature
+                  ? <span className="badge" style={{background:'var(--surface2)',color:'var(--success, #3ac97a)',border:'1px solid rgba(58,201,122,0.3)'}}>on</span>
+                  : <span style={{ color:'var(--muted)', fontSize:12 }}>off</span>}</td>
                 <td style={{ fontFamily:'var(--font-mono)', fontSize:12, whiteSpace:'nowrap' }}>{src.last_polled ? fmtRel(src.last_polled) : '—'}</td>
                 <td><StatusBadge status={src.enabled ? (src.last_status || '—') : 'disabled'} /></td>
                 <td style={{ fontFamily:'var(--font-mono)' }}>{src.alert_count}</td>
@@ -125,7 +130,7 @@ export default function FeedSources() {
               </tr>
             ))}
             {!loading && !sources.length && (
-              <tr><td colSpan={9} style={{color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>No feed sources configured.</td></tr>
+              <tr><td colSpan={10} style={{color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>No feed sources configured.</td></tr>
             )}
           </tbody>
         </table>
@@ -167,6 +172,17 @@ export default function FeedSources() {
             <div className="toggle-wrap">
               <Toggle checked={form.enabled} onChange={v => setF('enabled', v)} />
               <span style={{ fontSize:13 }}>Enabled</span>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="toggle-wrap">
+              <Toggle checked={form.verify_signature} onChange={v => setF('verify_signature', v)} />
+              <span style={{ fontSize:13 }}>Verify CAP Signature</span>
+            </div>
+            <div style={{ fontSize:11, color:'var(--muted)', marginTop:4 }}>
+              Alerts are still ingested either way, but tagged
+              verified / invalid / revoked / unsigned. Requires a pinned trust
+              root configured in eag.yaml (feeds.signature.trusted_roots_file).
             </div>
           </div>
 

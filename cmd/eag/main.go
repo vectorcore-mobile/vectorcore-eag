@@ -116,7 +116,7 @@ func main() {
 	go expiryWorker.Run(ctx)
 
 	// API server
-	server := api.NewServer(database, manager, xmppServer, expiryWorker, &cfg.XMPPServer, startAt, version, webui.FS, logWriter)
+	server := api.NewServer(database, manager, xmppServer, expiryWorker, &cfg.XMPPServer, &cfg.Map, startAt, version, webui.FS, logWriter)
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	slog.Info("starting VectorCore EAG", "addr", addr, "db_driver", cfg.Database.Driver)
 

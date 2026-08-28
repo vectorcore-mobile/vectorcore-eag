@@ -15,6 +15,12 @@ feeds:
   # The user_agent MUST follow the format "AppName/Version (contact-email)".
   # NWS returns 403 without a properly formatted User-Agent.
 
+  signature:
+    # Pinned root CA(s) for CAP <Signature> verification (PEM bundle).
+    # Only takes effect for feed sources with "Verify Signature" enabled.
+    # See config/tls/cap_trust_roots.pem.README.md for provenance / how to update.
+    trusted_roots_file: "config/tls/cap_trust_roots.pem"
+
 expiry:
   sweep_interval: 120     # seconds between expiry sweeps (default: 300)
   hard_delete_after: 4    # hours after soft-delete before permanent removal (default: 72)
@@ -24,6 +30,14 @@ log:
   file: "eag.log"         # path to log file; omit or leave empty for no file logging
   # Use the -d flag at startup to also write logs to stdout regardless of this setting.
   # Without -d, logs go only to the file (if configured) never to the console.
+
+map:
+  # CARTO's basemap tiles (used by the Alert Detail map) now require an API
+  # key. Get a free one (5 million tile requests/month, no approval queue)
+  # at: https://carto.com/basemaps/apikey/
+  # Left empty, tiles are requested unauthenticated and will eventually show
+  # CARTO's "API key required" watermark on the map.
+  carto_api_key: ""
 
 xmpp_server:
   domain: "eag.example.com"   # XMPP domain used in stream headers and peer JIDs

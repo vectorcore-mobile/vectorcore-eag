@@ -16,10 +16,15 @@ import (
 	"github.com/vectorcore/eag/internal/models"
 )
 
+// cbeFeedSource is the models.Alert.FeedSource value stamped on every
+// operator-originated alert, so it shows in Alerts alongside polled feeds
+// (and expires the same way) under a clearly-local label.
+const cbeFeedSource = "Local CBE"
+
 // registerCBEHandlers wires up the CBE (Cell Broadcast Entity) alert
 // origination endpoint — lets an operator compose and submit a CAP alert
 // from the web UI, feeding it into the same insert/broadcast pipeline used
-// by polled feeds. Listing reuses GET /api/v1/alerts?feed_source=CBE.
+// by polled feeds. Listing reuses GET /api/v1/alerts?feed_source=Local+CBE.
 func registerCBEHandlers(api huma.API, db *gorm.DB, manager *feeds.Manager) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "create-cbe-alert",
@@ -166,8 +171,9 @@ func createCBEAlert(db *gorm.DB, manager *feeds.Manager, input *CBEAlertInput) (
 		Onset:       onset,
 		Expires:     expires,
 		AreaDesc:    b.AreaDesc,
-		FeedSource:  "CBE",
+		FeedSource:  cbeFeedSource,
 		Geometry:    b.Geometry,
+		GeoCodes:    models.EncodeGeoCodes(cbeGeoCodeEntries(b.GeoCodes)),
 	}
 
 	polygons := geometryToCAPPolygons(b.Geometry)
@@ -177,6 +183,17 @@ func createCBEAlert(db *gorm.DB, manager *feeds.Manager, input *CBEAlertInput) (
 	manager.UpsertAlertDirect(&alert)
 
 	return &CBEAlertOutput{Body: alert}, nil
+}
+
+func cbeGeoCodeEntries(refs []GeoCodeRef) []models.GeoCodeEntry {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]models.GeoCodeEntry, len(refs))
+	for i, r := range refs {
+		out[i] = models.GeoCodeEntry{Type: r.Type, Value: r.Code}
+	}
+	return out
 }
 
 func defaultStr(v, fallback string) string {

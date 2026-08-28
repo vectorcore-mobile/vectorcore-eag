@@ -150,6 +150,19 @@ func buildNWSCAPXML(p nwsProperties) string {
 	return b.String()
 }
 
+// nwsGeoCodes flattens NWS's geocode map (keyed "SAME"/"UGC") into entries,
+// SAME first then UGC, matching the order buildNWSCAPXML emits them in.
+func nwsGeoCodes(geocode map[string][]string) []models.GeoCodeEntry {
+	var out []models.GeoCodeEntry
+	for _, code := range geocode["SAME"] {
+		out = append(out, models.GeoCodeEntry{Type: "SAME", Value: code})
+	}
+	for _, code := range geocode["UGC"] {
+		out = append(out, models.GeoCodeEntry{Type: "UGC", Value: code})
+	}
+	return out
+}
+
 // parseTime parses a CAP/NWS timestamp and normalizes it to UTC.
 //
 // Source feeds report times with their local offset (e.g. "-04:00" for
@@ -285,6 +298,7 @@ func pollNWS(ctx context.Context, client *http.Client, sourceURL, userAgent, fee
 				AreaDesc:    p.AreaDesc,
 				FeedSource:  feedName,
 				Geometry:    geom,
+				GeoCodes:    models.EncodeGeoCodes(nwsGeoCodes(p.Geocode)),
 				RawCAP:      buildNWSCAPXML(p),
 			}
 

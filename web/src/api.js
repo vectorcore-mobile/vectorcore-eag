@@ -45,6 +45,7 @@ export const api = {
   reconnectXMPP: (id)       => req('POST',   '/xmpp/' + id + '/reconnect'),
 
   // System
-  getStatus:  () => req('GET',  '/system/status'),
-  runExpiry:  () => req('POST', '/system/expiry'),
+  getStatus:    () => req('GET',  '/system/status'),
+  runExpiry:    () => req('POST', '/system/expiry'),
+  getMapConfig: () => req('GET',  '/system/map-config'),
 }

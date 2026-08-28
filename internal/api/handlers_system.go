@@ -14,7 +14,7 @@ import (
 	"github.com/vectorcore/eag/internal/xmpp"
 )
 
-func registerSystemHandlers(api huma.API, db *gorm.DB, srv *xmpp.Server, exp *expiry.Worker, xmppCfg *config.XMPPServerConfig, startAt int64, version string) {
+func registerSystemHandlers(api huma.API, db *gorm.DB, srv *xmpp.Server, exp *expiry.Worker, xmppCfg *config.XMPPServerConfig, mapCfg *config.MapConfig, startAt int64, version string) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-status",
 		Method:      http.MethodGet,
@@ -23,6 +23,18 @@ func registerSystemHandlers(api huma.API, db *gorm.DB, srv *xmpp.Server, exp *ex
 		Tags:        []string{"System"},
 	}, func(ctx context.Context, input *struct{}) (*StatusOutput, error) {
 		return getStatus(db, srv, xmppCfg, startAt, version)
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-map-config",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/system/map-config",
+		Summary:     "Basemap tile configuration for the web UI",
+		Tags:        []string{"System"},
+	}, func(ctx context.Context, input *struct{}) (*MapConfigOutput, error) {
+		out := &MapConfigOutput{}
+		out.Body = MapConfigBody{CartoAPIKey: mapCfg.CartoAPIKey}
+		return out, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -42,11 +54,22 @@ type StatusOutput struct {
 	Body StatusBody
 }
 
+type MapConfigOutput struct {
+	Body MapConfigBody
+}
+
+// MapConfigBody is safe to expose unauthenticated: CARTO basemap keys are
+// meant for client-side/browser use (see https://carto.com/basemaps/apikey/),
+// not a server secret.
+type MapConfigBody struct {
+	CartoAPIKey string `json:"carto_api_key,omitempty"`
+}
+
 type StatusBody struct {
-	Version       string          `json:"version"`
-	UptimeSeconds int64           `json:"uptime_seconds"`
-	Database      DBStatus        `json:"database"`
-	Feeds         []FeedStatus    `json:"feeds"`
+	Version       string           `json:"version"`
+	UptimeSeconds int64            `json:"uptime_seconds"`
+	Database      DBStatus         `json:"database"`
+	Feeds         []FeedStatus     `json:"feeds"`
 	XMPPServer    XMPPServerStatus `json:"xmpp_server"`
 }
 
@@ -66,10 +89,10 @@ type FeedStatus struct {
 }
 
 type XMPPServerStatus struct {
-	C2S        ListenerStatus  `json:"c2s"`
-	C2STLS     ListenerStatus  `json:"c2s_tls"`
-	PeerCount  int             `json:"peer_count"`
-	Connected  []xmpp.ConnStatus `json:"connected"`
+	C2S       ListenerStatus    `json:"c2s"`
+	C2STLS    ListenerStatus    `json:"c2s_tls"`
+	PeerCount int               `json:"peer_count"`
+	Connected []xmpp.ConnStatus `json:"connected"`
 }
 
 type ListenerStatus struct {

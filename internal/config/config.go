@@ -14,6 +14,18 @@ type Config struct {
 	Expiry     ExpiryConfig     `yaml:"expiry"`
 	Log        LogConfig        `yaml:"log"`
 	XMPPServer XMPPServerConfig `yaml:"xmpp_server"`
+	Map        MapConfig        `yaml:"map"`
+}
+
+// MapConfig configures the basemap tiles the web UI's Alert Detail map uses.
+// CARTO now requires an API key for its basemap tiles (rolling out to raster
+// first) — get a free one (5M tile requests/month, no approval queue) at
+// https://carto.com/basemaps/apikey/. Served to the web UI over
+// GET /api/v1/system/map-config; left empty, tiles are requested
+// unauthenticated and will eventually show CARTO's "API key required"
+// watermark.
+type MapConfig struct {
+	CartoAPIKey string `yaml:"carto_api_key"`
 }
 
 type ServerConfig struct {
@@ -27,12 +39,24 @@ type DatabaseConfig struct {
 }
 
 type FeedsConfig struct {
-	PollInterval int    `yaml:"poll_interval"`
-	UserAgent    string `yaml:"user_agent"`
+	PollInterval int             `yaml:"poll_interval"`
+	UserAgent    string          `yaml:"user_agent"`
+	Signature    SignatureConfig `yaml:"signature"`
+}
+
+// SignatureConfig configures CAP <Signature> verification (internal/capverify).
+// Verification itself is opt-in per feed source (FeedSource.VerifySignature);
+// this just tells the gateway where to find the trust anchors to check against.
+type SignatureConfig struct {
+	// TrustedRootsFile is a PEM bundle of pinned CA root certificates.
+	// Sources with VerifySignature enabled will fail verification if this
+	// is unset or unreadable — the gateway deliberately does not fetch a
+	// root from anywhere the alert message itself could influence.
+	TrustedRootsFile string `yaml:"trusted_roots_file"`
 }
 
 type ExpiryConfig struct {
-	SweepInterval  int `yaml:"sweep_interval"`
+	SweepInterval   int `yaml:"sweep_interval"`
 	HardDeleteAfter int `yaml:"hard_delete_after"`
 }
 
@@ -89,7 +113,7 @@ func Load(path string) (*Config, error) {
 			UserAgent:    "VectorCore-EAG/1.0 (ops@example.com)",
 		},
 		Expiry: ExpiryConfig{
-			SweepInterval:  300,
+			SweepInterval:   300,
 			HardDeleteAfter: 72,
 		},
 		Log: LogConfig{

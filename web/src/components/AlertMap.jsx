@@ -1,6 +1,28 @@
 import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { api } from '../api.js'
+
+const CARTO_TILE_BASE = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+
+function cartoTileURL(key) {
+  return key ? `${CARTO_TILE_BASE}?key=${encodeURIComponent(key)}` : CARTO_TILE_BASE
+}
+
+// CARTO's basemap tiles now require an API key (rolling out to raster first)
+// — without one, tiles eventually show an "API key required" watermark. Get
+// a free key (5M tile requests/month, no approval queue) at
+// https://carto.com/basemaps/apikey/, then set map.carto_api_key in
+// eag.yaml. Fetched once per page load and cached here.
+let cartoApiKeyPromise = null
+function getCartoApiKey() {
+  if (!cartoApiKeyPromise) {
+    cartoApiKeyPromise = api.getMapConfig()
+      .then(r => r?.carto_api_key || '')
+      .catch(() => '')
+  }
+  return cartoApiKeyPromise
+}
 
 // Severity → polygon colour
 function sevColor(severity) {
@@ -45,24 +67,43 @@ export default function AlertMap({ geometry, severity, areaDesc }) {
         attributionControl: true,
       })
 
-      // CartoDB dark tiles — matches the ops console aesthetic
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      // CartoDB light (Positron) tiles — easier to read shapes/labels against.
+      const tileLayer = L.tileLayer(cartoTileURL(''), {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 19,
       }).addTo(mapRef.current)
+
+      // Apply the API key once fetched (see getCartoApiKey above) — starting
+      // the layer unkeyed rather than blocking map init on the round trip.
+      getCartoApiKey().then(key => { if (key) tileLayer.setUrl(cartoTileURL(key)) })
     }
 
     const map = mapRef.current
     const color = sevColor(severity)
+    const style = {
+      color,
+      weight: 2,
+      fillColor: color,
+      fillOpacity: 0.2,
+      opacity: 0.9,
+    }
 
+    // CAP <circle> shapes are carried as GeoJSON Point features with a
+    // "radius" property in meters (there's no native GeoJSON circle type —
+    // see internal/api/handlers_cbe.go and internal/feeds/feed.go). Render
+    // those as true geographic circles instead of L.geoJSON's default fixed
+    // pixel-radius marker; a FeatureCollection with several polygon/circle
+    // features (multiple CAP <polygon>/<circle> elements) renders each one
+    // via this same callback, so multiple shapes are supported for free.
     const layer = L.geoJSON(feature, {
-      style: {
-        color,
-        weight: 2,
-        fillColor: color,
-        fillOpacity: 0.2,
-        opacity: 0.9,
+      style,
+      pointToLayer: (pointFeature, latlng) => {
+        const radius = pointFeature.properties && pointFeature.properties.radius
+        if (typeof radius === 'number') {
+          return L.circle(latlng, { ...style, radius })
+        }
+        return L.circleMarker(latlng, style)
       },
     }).addTo(map)
 

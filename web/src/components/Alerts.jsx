@@ -26,7 +26,7 @@ export default function Alerts() {
   const [urgency, setUrg]   = useState('')
   const [status, setSt]     = useState('')
   const [msgType, setMsgType] = useState('')
-  const [feedSrc, setFeedSrc] = useState('')
+  const [feedSrc, setFeedSrc] = useState(searchParams.get('feed_source') || '')
   const [fromDate, setFrom] = useState('')
   const [toDate, setTo]     = useState('')
 
@@ -171,7 +171,9 @@ export default function Alerts() {
           <label>Feed Source</label>
           <select value={feedSrc} onChange={e => { setFeedSrc(e.target.value); setPage(1) }}>
             <option value="">All</option>
-            {feedNames.map(n => <option key={n}>{n}</option>)}
+            {/* Local CBE alerts aren't a configured FeedSource row, but they're
+                real feed_source values on Alert rows same as any polled feed. */}
+            {(feedNames.includes('Local CBE') ? feedNames : [...feedNames, 'Local CBE']).map(n => <option key={n}>{n}</option>)}
           </select>
         </div>
         <div style={{ flex:'0 0 160px' }}>
@@ -283,6 +285,7 @@ function AlertDetail({ alert: initial, onClose, onDelete }) {
         </Field>
         <Field label="Headline">{alert.headline}</Field>
         <Field label="Area">{alert.area_desc}</Field>
+        {alert.geocodes && <Field label="Geocodes"><GeoCodeChips geocodes={alert.geocodes} /></Field>}
         <Field label="Status / Msg Type">
           <span className="badge" style={{background:'var(--surface2)',color:'var(--muted)',border:'1px solid var(--border)'}}>{alert.status}</span>
           {' '}<span className="badge" style={{background:'var(--surface2)',color:'var(--muted)',border:'1px solid var(--border)'}}>{alert.msg_type}</span>
@@ -297,6 +300,7 @@ function AlertDetail({ alert: initial, onClose, onDelete }) {
         </div>
         <Field label="Sender"><mono>{alert.sender}</mono></Field>
         <Field label="Feed Source"><mono>{alert.feed_source}</mono></Field>
+        {alert.signature_status && <Field label="CAP Signature"><SignatureBadge status={alert.signature_status} /></Field>}
         <Field label="Forwarded">{alert.forwarded ? <span style={{color:'var(--ok)'}}>Yes</span> : 'No'}</Field>
         {alert.description && <Field label="Description"><div style={{whiteSpace:'pre-wrap',fontSize:13}}>{alert.description}</div></Field>}
         {alert.references && <Field label="References"><mono style={{fontSize:11,wordBreak:'break-all'}}>{alert.references}</mono></Field>}
@@ -324,6 +328,39 @@ function AlertDetail({ alert: initial, onClose, onDelete }) {
           {rawOpen && <pre className="raw-cap">{rawPretty || '(empty)'}</pre>}
         </div>
       </div>
+    </div>
+  )
+}
+
+const SIGNATURE_STYLES = {
+  verified: { color:'var(--success, #3ac97a)', border:'rgba(58,201,122,0.3)' },
+  invalid:  { color:'var(--danger, #e05a5a)',  border:'rgba(224,90,90,0.3)' },
+  revoked:  { color:'var(--danger, #e05a5a)',  border:'rgba(224,90,90,0.3)' },
+  unsigned: { color:'var(--muted)',            border:'var(--border)' },
+}
+
+function SignatureBadge({ status }) {
+  const s = SIGNATURE_STYLES[status] || SIGNATURE_STYLES.unsigned
+  return (
+    <span className="badge" style={{ background:'var(--surface2)', color:s.color, border:`1px solid ${s.border}` }}>
+      {status}
+    </span>
+  )
+}
+
+function GeoCodeChips({ geocodes }) {
+  let entries = []
+  try { entries = JSON.parse(geocodes) } catch { return null }
+  if (!Array.isArray(entries) || !entries.length) return null
+  return (
+    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+      {entries.map((gc, i) => (
+        <span key={i} className="chip">
+          <code style={{fontSize:11, fontWeight:700}}>{gc.type}</code>
+          <span style={{color:'var(--muted)', margin:'0 4px'}}>=</span>
+          <code style={{fontSize:11}}>{gc.value}</code>
+        </span>
+      ))}
     </div>
   )
 }
